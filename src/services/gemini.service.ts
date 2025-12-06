@@ -242,6 +242,7 @@ export const generateNextPhasePlan = async (
       contents: { parts },
       config: {
         systemInstruction,
+        temperature: 0.7,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -347,23 +348,19 @@ export const chatWithNutritionist = async (
       - Keep responses concise (under 3 sentences unless asked for detail).
     `;
 
-    const chat = ai.chats.create({
-      model: FAST_MODEL,
-      history: history,
-      config: { systemInstruction }
-    });
-
-    const parts: any[] = [{ text: message }];
+    const parts: any[] = [{ text: systemInstruction + "\n\nUser: " + (message || "Hi") }];
+    
     if (image) {
       const cleanBase64 = image.split(',')[1] || image;
       parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } });
     }
 
-    const result = await chat.sendMessage({
-      content: { parts }
-    } as any);
+    const result = await ai.models.generateContent({
+      model: FAST_MODEL,
+      contents: { parts }
+    });
 
-    return result.text || "...";
+    return result.text || "....";
   } catch (e: any) {
     console.error('Chat error:', e);
     const errorMsg = e?.message || '';
