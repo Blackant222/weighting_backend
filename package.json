@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "build": "tsc",
-    "start": "bun src/index.ts"
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "@google/genai": "^1.31.0",
