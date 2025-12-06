@@ -19,13 +19,14 @@ export const generatePlan = async (req: AuthRequest, res: Response) => {
     const plan = await geminiService.generateInitialPlan(profile, imageBase64 || null);
     
     if (!plan || !plan.days || plan.days.length === 0) {
-      throw new Error('Failed to generate valid plan - no days returned');
+      throw new Error('AI failed to generate valid plan');
     }
     
     await planRepo.saveDietPlan(req.userId!, plan);
     
     res.json({ success: true, data: plan });
   } catch (error: any) {
+    console.error('Plan generation error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

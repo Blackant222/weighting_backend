@@ -68,11 +68,11 @@ export const generateInitialPlan = async (
   const langInstruction = getLangInstruction(profile);
 
   const systemInstruction = `
-    You are 'BroBot'. Generate a 7-day diet plan.
+    You are 'BroBot'. Generate EXACTLY a 7-day diet plan.
     User Country: ${profile.country}. Avoid culturally taboo/hard-to-find ingredients for this country.
     Meal Structure: "${profile.mealsPerDay}".
     ${langInstruction}
-    Output strict JSON.
+    Output strict JSON with EXACTLY 7 days.
   `;
 
   const userContext = JSON.stringify({
@@ -82,7 +82,44 @@ export const generateInitialPlan = async (
     onboardingComplete: undefined
   });
 
-  const prompt = `Analyze: ${userContext}. ${imageBase64 ? "Use attached image for body composition." : ""} Create Week 1 Plan.`;
+  const prompt = `Analyze: ${userContext}. ${imageBase64 ? "Use attached image for body composition." : ""} Create Week 1 Plan with EXACTLY 7 days.
+  
+  EXAMPLE OUTPUT:
+  {
+    "week": 1,
+    "bodyComposition": {
+      "estimatedBodyFat": 18.5,
+      "muscleMassEstimate": 65.2,
+      "postureNotes": "Good posture, solid foundation bro!"
+    },
+    "healthInsights": [
+      "Drink 3L water daily",
+      "Get 7-8 hours sleep",
+      "Track your meals"
+    ],
+    "days": [
+      {
+        "day": 1,
+        "title": "Day 1",
+        "totalCalories": 2200,
+        "completed": false,
+        "meals": [
+          {
+            "name": "Protein Oats",
+            "type": "Breakfast",
+            "ingredients": ["Oats 80g", "Protein powder 30g", "Banana"],
+            "instructions": ["Mix oats with water", "Add protein powder", "Top with banana"],
+            "prepTime": "5 min",
+            "calories": 450,
+            "completed": false,
+            "macros": {"protein": 35, "carbs": 60, "fats": 10}
+          }
+        ]
+      }
+    ]
+  }
+  
+  Generate EXACTLY 7 days like this.`;
 
   const parts: any[] = [{ text: prompt }];
   if (imageBase64) {
@@ -90,70 +127,78 @@ export const generateInitialPlan = async (
     parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } });
   }
 
-  try {
-    const response = await ai.models.generateContent({
-      model: FAST_MODEL,
-      contents: { parts },
-      config: {
-        systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            week: { type: Type.INTEGER },
-            bodyComposition: {
+  const response = await ai.models.generateContent({
+    model: FAST_MODEL,
+    contents: { parts },
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          week: { type: Type.INTEGER },
+          bodyComposition: {
+            type: Type.OBJECT,
+            properties: {
+              estimatedBodyFat: { type: Type.NUMBER },
+              muscleMassEstimate: { type: Type.NUMBER },
+              postureNotes: { type: Type.STRING },
+            },
+            required: ["estimatedBodyFat", "muscleMassEstimate", "postureNotes"]
+          },
+          healthInsights: { type: Type.ARRAY, items: { type: Type.STRING } },
+          days: {
+            type: Type.ARRAY,
+            items: {
               type: Type.OBJECT,
               properties: {
-                estimatedBodyFat: { type: Type.NUMBER },
-                muscleMassEstimate: { type: Type.NUMBER },
-                postureNotes: { type: Type.STRING },
-              }
-            },
-            healthInsights: { type: Type.ARRAY, items: { type: Type.STRING } },
-            days: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  day: { type: Type.INTEGER },
-                  title: { type: Type.STRING },
-                  totalCalories: { type: Type.NUMBER },
-                  completed: { type: Type.BOOLEAN },
-                  meals: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        name: { type: Type.STRING },
-                        type: { type: Type.STRING },
-                        ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        instructions: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        prepTime: { type: Type.STRING },
-                        calories: { type: Type.NUMBER },
-                        macros: {
-                          type: Type.OBJECT,
-                          properties: {
-                            protein: { type: Type.NUMBER },
-                            carbs: { type: Type.NUMBER },
-                            fats: { type: Type.NUMBER },
-                          }
-                        }
+                day: { type: Type.INTEGER },
+                title: { type: Type.STRING },
+                totalCalories: { type: Type.NUMBER },
+                completed: { type: Type.BOOLEAN },
+                meals: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      type: { type: Type.STRING },
+                      ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
+                      instructions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                      prepTime: { type: Type.STRING },
+                      calories: { type: Type.NUMBER },
+                      completed: { type: Type.BOOLEAN },
+                      macros: {
+                        type: Type.OBJECT,
+                        properties: {
+                          protein: { type: Type.NUMBER },
+                          carbs: { type: Type.NUMBER },
+                          fats: { type: Type.NUMBER },
+                        },
+                        required: ["protein", "carbs", "fats"]
                       }
-                    }
+                    },
+                    required: ["name", "type", "ingredients", "instructions", "prepTime", "calories", "macros"]
                   }
                 }
-              }
+              },
+              required: ["day", "title", "totalCalories", "completed", "meals"]
             }
           }
-        }
+        },
+        required: ["week", "bodyComposition", "healthInsights", "days"]
       }
-    });
+    }
+  });
 
-    return JSON.parse(response.text || "{}");
-  } catch (error) {
-    console.error("Plan generation error", error);
-    throw error;
+  const plan = JSON.parse(response.text || "{}");
+  
+  if (!plan.days || plan.days.length !== 7) {
+    throw new Error(`AI returned ${plan.days?.length || 0} days instead of 7`);
   }
+  
+  return plan;
 };
 
 export const generateNextPhasePlan = async (
